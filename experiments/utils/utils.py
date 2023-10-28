@@ -55,6 +55,8 @@ def sql_parser(action: str):
         return action, False
     action = " ".join(matches[0].split())
     action = up_to_semicolon(action)
+    if action.strip() == "":
+        return "NO ACTION", False
     if not action.split()[0].upper() in SQL_KEYWORDS:
         return action, False
     return action, True
@@ -72,10 +74,13 @@ def sql_parser_react(action: str):
     return action, False
 
 def ctf_parser(action: str):
-    action = action.strip()
-    if action.startswith("Action:"):
-        action = action[len("Action:"):].strip()
-    return action, True
+    action = action.split("\n")[0]
+    pattern = r'Action:(.*)'
+    matches = re.findall(pattern, action, re.DOTALL)
+    if len(matches) > 0:
+        action = matches[0]
+        return action.strip(), True
+    return action.strip(), False
 
 def python_parser(action: str):
     if action.startswith("def"):
@@ -94,7 +99,7 @@ ACTION_PARSER_MAP_REACT = {"sql": sql_parser_react, "bash": bash_parser_react}
 # MARK: Handicaps
 
 def handicap_bash(record: Dict) -> str:
-    pass
+    return "You are an expert in Bash."
 
 def handicap_sql(record: Dict) -> str:
     # Custom handicap for spider dev dataset

@@ -5,10 +5,9 @@ from intercode.envs import (
 from tqdm import tqdm
 from typing import Dict, List
 from experiments.policies import (
-    CompletionGPTPolicy, ChatGPTPolicy, PalmChatPolicy, PalmCompletionPolicy
+    CompletionGPTPolicy, ChatGPTPolicy, PalmChatPolicy, PalmCompletionPolicy, HFChatPolicy
 )
 from experiments.utils import HANDICAP_MAP, PROMPT_MAP
-from rich import print
 
 parser = argparse.ArgumentParser(description='N-turn evaluation for Intercode environment')
 parser.add_argument('--data_path', type=str, help='path to dataset to evaluate on')
@@ -18,7 +17,7 @@ parser.add_argument('--handicap', action='store_true', help='enable handicap')
 parser.add_argument('--image_name', type=str, help='name of docker image to build environment with')
 parser.add_argument('--log_dir', type=str, help='folder to save experiment run log file to')
 parser.add_argument('--max_turns', type=int, help='max number of interaction turns')
-parser.add_argument('--policy', choices=['chat', 'complete'], help="policy to use for evaluation")
+parser.add_argument('--policy', choices=['chat', 'complete', "hf_chat"], help="policy to use for evaluation")
 parser.add_argument('--template', type=str, help="template to use for prompting strategy")
 parser.add_argument('--verbose', action='store_true', help="print out logs")
 parser.add_argument('--model', type=str, help="model to use for policy")
@@ -49,7 +48,7 @@ class ExperimentWrapper():
         self.env = None
         if args.env == 'sql':
             self.env = SqlEnv(image_name=args.image_name,
-                data_path=args.data_path, preprocess=preprocess_sql)
+                data_path=args.data_path, preprocess=preprocess_sql, verbose=args.verbose)
         elif args.env == 'bash':
             self.env = BashEnv(image_name=args.image_name,
                 data_path=args.data_path)
@@ -65,7 +64,8 @@ class ExperimentWrapper():
         # Define log file name and path
         if not os.path.exists(args.log_dir):
             os.makedirs(args.log_dir, exist_ok=True)
-        log_file_name = f"{self.env.name}_multiturn_{args.model}_{args.max_turns}_turns.json"
+        data_file_name = os.path.basename(args.data_path).split(".")[0]
+        log_file_name = f"{self.env.name}_multiturn_{args.model}_template-{args.template}_{args.max_turns}_turns_{data_file_name}.json"
         self.log_path = os.path.join(args.log_dir, log_file_name)
         self.log_data = {}
 
@@ -75,6 +75,9 @@ class ExperimentWrapper():
         self.policy = None
         if args.policy == 'chat':
             self.policy = ChatGPTPolicy(language=args.env, setting=SETTING_MAP[args.env],
+                template=args.template, dialogue_limit=args.dialogue_limit, model=args.model)
+        elif args.policy == 'hf_chat':
+            self.policy = HFChatPolicy(language=args.env, setting=SETTING_MAP[args.env],
                 template=args.template, dialogue_limit=args.dialogue_limit, model=args.model)
         elif args.policy == 'complete':
             self.policy = CompletionGPTPolicy(language=args.env, setting=SETTING_MAP[args.env],

@@ -5,15 +5,6 @@ import re
 import os
 import config
 
-# Set HuggingFace token from environment or config file
-access_token = os.environ.get("HF_TOKEN")
-if (access_token is None or access_token == "") and os.path.isfile(os.path.join(os.getcwd(), "keys.cfg")):
-    cfg = config.Config('keys.cfg')
-    access_token = cfg.get("HF_TOKEN")
-assert(access_token)
-HF_TOKEN = access_token
-hf_headers = {"Authorization": f"Bearer {HF_TOKEN}"}
-
 # Set HuggingFace Endpoint URL from environment or config file
 endpoint = os.environ.get("HF_API_URL")
 if (endpoint is None or endpoint == "") and os.path.isfile(os.path.join(os.getcwd(), "keys.cfg")):
@@ -23,26 +14,25 @@ assert(endpoint != None)
 HF_API_URL = endpoint
 
 
-def HFChat(message):
+def HFChat(message, stop_sequences=None):
     # Prevent RateLimit errors
-    time.sleep(1)
-    payload = {"inputs": message, "parameters": {"max_new_tokens": 100, "temperature": 0.01}}
-    response = requests.post(HF_API_URL, headers=hf_headers, json=payload)
-    result = ""
+    # time.sleep(1)
+    payload = {"inputs": message, "parameters": {"max_new_tokens": 512, "temperature": 0.01, "stop": stop_sequences, "return_full_text": False}}
+    response = requests.post(HF_API_URL, json=payload)
+    
+    if response.status_code == 422:
+        print(response.json()["error"])
+        if "Given: " in response.json()["error"]:
+            error_msg = response.json()["error"]
+            given_length = int(re.search(r"Given: (\d+) `inputs` tokens", error_msg).group(1))
+            payload["parameters"]["max_new_tokens"] = 4096 - given_length - 1
+            response = requests.post(HF_API_URL, json=payload)
+
+    if response.status_code != 200:
+        print(f"Error: {response.status_code}")
+        print(response.text)
+        return ""
+        
     output = response.json()
-    if len(output) != 0:
-        result = output[0]["generated_text"].strip()
-        re.sub("\n", " ", result)
-        split_result = result.split("<|end|>")
-        if len(split_result) > 1:
-            result = split_result[0]
-        split_result = result.split("<|assistant|>")
-        if len(split_result) > 1:
-            result = split_result[1]
-        split_result = result.split("<|system|>")
-        if len(split_result) > 1:
-            result = split_result[0]
-        split_result = result.split()
-        if len(split_result) > 1 and split_result[0] == "sh":
-            result = " ".join(result.split()[1:])
-    return result.strip()
+    result = output[0]["generated_text"].strip()
+    return result
